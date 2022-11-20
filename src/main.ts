@@ -6,6 +6,7 @@ import { GameGeteway } from "./dataaccess/gameGeteway";
 import { TurnGateway } from "./dataaccess/turnGatewat";
 import { MoveGateway } from "./dataaccess/moveGateway";
 import { SquareGateway } from "./dataaccess/squareGateway";
+import { gameRouter } from "./presentation/gameRouter";
 
 const EMPTY = 0;
 const DARK = 1;
@@ -40,6 +41,8 @@ app.get("/api/hello", async (req, res) => {
     message: "hello Express!!!",
   });
 });
+
+app.use(gameRouter);
 
 app.post("/api/games/latest/turns", async (req, res) => {
   const turnCount = parseInt(req.body.turnCount);
