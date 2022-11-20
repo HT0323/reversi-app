@@ -24,11 +24,89 @@ const app = express();
 
 app.use(morgan("dev"));
 app.use(express.static("static", { extensions: ["html"] }));
+app.use(express.json());
 
 app.get("/api/hello", async (req, res) => {
   res.json({
     message: "hello Express!!!",
   });
+});
+
+app.post("/api/games/latest/turns", async (req, res) => {
+  const turnCount = parseInt(req.body.turnCount);
+  const disc = parseInt(req.body.move.disc);
+  const x = parseInt(req.body.move.x);
+  const y = parseInt(req.body.move.y);
+
+  const conn = await connectMySql();
+
+  try {
+    // 直前の盤面を取得
+    const gameSelectResult = await conn.execute<mysql.RowDataPacket[]>(
+      "select id, started_at from games order by id desc limit 1"
+    );
+    const game = gameSelectResult[0][0];
+
+    const previoustTurnCount = turnCount - 1;
+    const turnSelectResult = await conn.execute<mysql.RowDataPacket[]>(
+      "select id, game_id, turn_count, next_disc, end_at from turns where game_id = ? and turn_count = ?",
+      [game["id"], previoustTurnCount]
+    );
+    const turn = turnSelectResult[0][0];
+    const squaresSelectResult = await conn.execute<mysql.RowDataPacket[]>(
+      "select id ,turn_id, x, y, disc from squares where turn_id = ?",
+      [turn["id"]]
+    );
+    const squares = squaresSelectResult[0];
+    const board = Array.from(Array(8)).map(() => Array.from(Array(8)));
+    squares.forEach((s) => {
+      board[s.y][s.x] = s.disc;
+    });
+
+    // 指定された場所に石を置く
+    board[y][x] = disc;
+
+    const now = new Date();
+    const nextDisc = disc === DARK ? LIGHT : DARK;
+    const turnInsertResult = await conn.execute<mysql.ResultSetHeader>(
+      "insert into turns (game_id, turn_count, next_disc, end_at) values (?,?,?,?)",
+      [game["id"], turnCount, nextDisc, now]
+    );
+    const turnId = turnInsertResult[0].insertId;
+
+    const squareCount = board
+      .map((line) => line.length)
+      .reduce((v1, v2) => v1 + v2, 0);
+
+    const squareInsertSql =
+      "insert into squares (turn_id, x, y, disc) values " +
+      Array.from(Array(squareCount))
+        .map(() => "(?, ?, ?, ?)")
+        .join(", ");
+
+    const squareInsertValues: any[] = [];
+    board.forEach((line, y) => {
+      line.forEach((disc, x) => {
+        squareInsertValues.push(turnId);
+        squareInsertValues.push(x);
+        squareInsertValues.push(y);
+        squareInsertValues.push(disc);
+      });
+    });
+
+    await conn.execute(squareInsertSql, squareInsertValues);
+
+    await conn.execute(
+      "insert into moves (turn_id, disc, x, y) values (?,?,?,?)",
+      [turnId, disc, x, y]
+    );
+
+    await conn.commit();
+  } finally {
+    await conn.end();
+  }
+
+  res.status(201).end();
 });
 
 app.get("/api/error", async (req, res) => {
