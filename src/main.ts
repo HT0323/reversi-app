@@ -4,6 +4,7 @@ import "express-async-errors";
 import mysql from "mysql2/promise";
 import { GameGeteway } from "./dataaccess/gameGeteway";
 import { TurnGateway } from "./dataaccess/turnGatewat";
+import { MoveGateway } from "./dataaccess/moveGateway";
 
 const EMPTY = 0;
 const DARK = 1;
@@ -30,6 +31,7 @@ app.use(express.json());
 
 const gameGeteway = new GameGeteway();
 const turnGateway = new TurnGateway();
+const moveGateway = new MoveGateway();
 
 app.get("/api/hello", async (req, res) => {
   res.json({
@@ -108,10 +110,7 @@ app.post("/api/games/latest/turns", async (req, res) => {
 
     await conn.execute(squareInsertSql, squareInsertValues);
 
-    await conn.execute(
-      "insert into moves (turn_id, disc, x, y) values (?,?,?,?)",
-      [turnRecord.id, disc, x, y]
-    );
+    await moveGateway.insert(conn, turnRecord.id, disc, x, y);
 
     await conn.commit();
   } finally {
